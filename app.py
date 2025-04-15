@@ -84,6 +84,69 @@ filtered = df[
 # -----------------------------
 st.title("📊 Boston Crime Dashboard")
 
+# -----------------------------
+# 🤖 GPT-4 Generated SQL Section
+# -----------------------------
+st.divider()
+st.header("AI Assitant")
+
+user_question = st.text_area("Ask me any question related to boston crime", placeholder="e.g., What are the top 5 most frequent crimes in each district?")
+
+if st.button("Run"):
+    if not user_question.strip():
+        st.warning("Please enter a question.")
+    else:
+        client = bigquery.Client(project=PROJECT_ID)
+        table_ref = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
+        schema = client.get_table(table_ref).schema
+        schema_str = "\n".join([f"{field.name}: {field.field_type}" for field in schema])
+
+       # Compose GPT prompt with the full table path
+        full_table_path = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
+
+        prompt = f"""
+        You are a BigQuery SQL expert.
+
+        Based on the schema below, generate a BigQuery Standard SQL query to answer the user's question.
+        Always use this full table path in your FROM clause: `{full_table_path}`
+
+        Schema:
+        {schema_str}
+
+        User Question:
+        {user_question}
+
+        Return ONLY the SQL query. No explanation. No markdown.
+        """
+
+
+        try:
+            with st.spinner("GPT-4 is generating your SQL..."):
+                response = openai.ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You write SQL queries for BigQuery datasets."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=500
+                )
+                sql = response.choices[0].message.content.strip().strip("```sql").strip("```")
+                st.code(sql, language="sql")
+
+            # Execute SQL on BigQuery
+            with st.spinner("Running query on the dataset..."):
+                result_df = client.query(sql).to_dataframe()
+                st.success("Query execution completed!!")
+                st.dataframe(result_df)
+
+                # # Optional chart
+                # if result_df.shape[1] >= 2 and pd.api.types.is_numeric_dtype(result_df.iloc[:, 1]):
+                #     st.bar_chart(result_df.set_index(result_df.columns[0]))
+
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+
 # 📍 Map
 st.header("🗺️ Incident Locations")
 map_data = filtered.rename(columns={"Lat": "lat", "Long": "lon"})
@@ -141,66 +204,3 @@ district_crime = filtered["DISTRICT"].value_counts().reset_index()
 district_crime.columns = ["District", "Crime Count"]
 fig_choro = px.bar(district_crime, x="District", y="Crime Count", title="Crimes by District")
 st.plotly_chart(fig_choro, use_container_width=True)
-
-# -----------------------------
-# 🤖 GPT-4 Generated SQL Section
-# -----------------------------
-st.divider()
-st.header("🧠 Ask GPT-4 to Generate a BigQuery SQL Query")
-
-user_question = st.text_area("Ask a question about your dataset", placeholder="e.g., What are the top 5 most frequent crimes in each district?")
-
-if st.button("Generate & Run SQL"):
-    if not user_question.strip():
-        st.warning("Please enter a question.")
-    else:
-        client = bigquery.Client(project=PROJECT_ID)
-        table_ref = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
-        schema = client.get_table(table_ref).schema
-        schema_str = "\n".join([f"{field.name}: {field.field_type}" for field in schema])
-
-       # Compose GPT prompt with the full table path
-        full_table_path = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
-
-        prompt = f"""
-        You are a BigQuery SQL expert.
-
-        Based on the schema below, generate a BigQuery Standard SQL query to answer the user's question.
-        Always use this full table path in your FROM clause: `{full_table_path}`
-
-        Schema:
-        {schema_str}
-
-        User Question:
-        {user_question}
-
-        Return ONLY the SQL query. No explanation. No markdown.
-        """
-
-
-        try:
-            with st.spinner("GPT-4 is generating your SQL..."):
-                response = openai.ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": "You write SQL queries for BigQuery datasets."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.3,
-                    max_tokens=500
-                )
-                sql = response.choices[0].message.content.strip().strip("```sql").strip("```")
-                st.code(sql, language="sql")
-
-            # Execute SQL on BigQuery
-            with st.spinner("Running SQL query..."):
-                result_df = client.query(sql).to_dataframe()
-                st.success("Query executed successfully!")
-                st.dataframe(result_df)
-
-                # Optional chart
-                if result_df.shape[1] >= 2 and pd.api.types.is_numeric_dtype(result_df.iloc[:, 1]):
-                    st.bar_chart(result_df.set_index(result_df.columns[0]))
-
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
