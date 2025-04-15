@@ -121,7 +121,7 @@ if st.button("Run"):
 
 
         try:
-            with st.spinner("GPT-4 is generating your SQL..."):
+            with st.spinner("Thinking..."):
                 response = openai.ChatCompletion.create(
                     model="gpt-4",
                     messages=[
@@ -132,7 +132,7 @@ if st.button("Run"):
                     max_tokens=500
                 )
                 sql = response.choices[0].message.content.strip().strip("```sql").strip("```")
-                st.code(sql, language="sql")
+                #st.code(sql, language="sql")
 
             # Execute SQL on BigQuery
             with st.spinner("Running query on the dataset..."):
